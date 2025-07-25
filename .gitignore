@@ -1,0 +1,49 @@
+# Python
+###################
+# Virtual Environment
+# Use venv/ or .venv/ depending on what you named your environment folder
+venv/
+.venv/
+
+# Byte-compiled / optimized / C extensions
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Project-specific files
+###################
+# Ignore the Selenium WebDriver executable
+chromedriver
+
+# macOS
+###################
+.DS_Store
+
+# VS Code
+###################
+.vscode/
+
+# Ignore the auto-downloaded chromedriver directory
+.chromedriver-mac-arm64/
+chromedriver-mac-arm64/LICENSE.chromedriver
+chromedriver-mac-arm64/THIRD_PARTY_NOTICES.chromedriver
