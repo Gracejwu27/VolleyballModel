@@ -39,7 +39,10 @@ def getMatchData():
     """
  # --- Configuration ---
     BASE_URL = "https://vnlw.volleystation.com"
-    SCHEDULE_URL = f"{BASE_URL}/en/season/102/phase-1784-vnl-2024-women/results/"
+    SCHEDULE_URLS = [
+        f"{BASE_URL}/en/season/102/phase-1784-vnl-2024-women/results/", # VNL 2024 Women
+        f"{BASE_URL}/en/phase-3451-vnl-2025-women/results/" # VNL 2025 Women
+    ]
 
     # --- Selenium Setup ---
     CHROMEDRIVER_PATH = '/Users/gracewu/VolleyML/chromedriver'
@@ -58,96 +61,107 @@ def getMatchData():
         service = Service(executable_path=CHROMEDRIVER_PATH)
         driver = webdriver.Chrome(service=service, options=options)
 
-        # Navigate to the URL
-        driver.get(SCHEDULE_URL)
-
-        # Wait for the main content to load. Adjust the condition as needed.
-        # We'll wait until 'matches-list-container' is present.
-        wait = WebDriverWait(driver, 20) # Wait up to 20 seconds for elements to appear
-        matches_list_container_element = wait.until(
-            EC.presence_of_element_located((By.CLASS_NAME, 'matches-list-container'))
-        )
-
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        matches_list_container = soup.find('div', class_='matches-list-container')
-        
-        if not matches_list_container:
-            print("No matches found in the HTML structure.")
-            exit()
-
-        day_groups = matches_list_container.find_all('div', class_='day-group')
-        for day_group in day_groups:
-            day_label = day_group.find('div', class_='day-label') # Gets the date of the matches
-            current_date = day_label.text.strip() if day_label else "Unknown Date"
-            print(f"Processing matches for date: {current_date}")
+        # Loop through each URL
+        for url in SCHEDULE_URLS:
+            print(f"Getting match data from URL: {url}...")
             
-            match_containers = day_group.find_all('a', href=lambda href: href and '/matches/' in href)
-            for match_container in match_containers:
-                match_detail_url = f"{BASE_URL}{match_container['href']}"
+            # Navigate to the current URL
+            driver.get(url)
 
-                # <==== EXTRACTING TEAM NAMES ====> 
-                teams_div = match_container.find('div', class_ = 'details').find('div', class_='teams')
-                teams = teams_div.find_all('div', class_='team')
+            # Wait for the main content to load. Adjust the condition as needed.
+            wait = WebDriverWait(driver, 20)
+            try:
+                matches_list_container_element = wait.until(
+                    EC.presence_of_element_located((By.CLASS_NAME, 'matches-list-container'))
+                )
+            except TimeoutException:
+                print(f"Warning: Timed out waiting for matches on {url}. Skipping this URL.")
+                continue # Skip to the next URL in the list if the element is not found
 
-                home_team_div = teams[0]
-                away_team_div = teams[1]
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            matches_list_container = soup.find('div', class_='matches-list-container')
+            
+            if not matches_list_container:
+                print(f"Warning: No matches found in the HTML structure for {url}. Skipping this URL.")
+                continue
+
+            day_groups = matches_list_container.find_all('div', class_='day-group')
+            for day_group in day_groups:
+                day_label = day_group.find('div', class_='day-label')
+                current_date = day_label.text.strip() if day_label else "Unknown Date"
+                print(f"Processing matches for date: {current_date}")
                 
-                home_team = home_team_div.find('div', class_='short-name').text.strip()
-                away_team = away_team_div.find('div', class_='short-name').text.strip()
-                
-                # <==== EXTRACTING MATCH RESULT ====>
-                match_score_div = match_container.find('div', class_='match-score')
-                # -- Overall Set Score --
-                set_score = match_score_div.find_all('div', class_='set-score')
-                home_set_score = int(set_score[0].text.strip())
-                away_set_score = int(set_score[1].text.strip())
+                match_containers = day_group.find_all('a', href=lambda href: href and '/matches/' in href)
+                for match_container in match_containers:
+                    match_detail_url = f"{BASE_URL}{match_container['href']}"
 
-                # -- Individual Set Scores --
-                sets_score_container = match_container.find('div', class_='sets-score')
-                set_results = sets_score_container.find_all('div', class_='result')
+                    try:
+                        teams_div = match_container.find('div', class_ = 'details').find('div', class_='teams')
+                        teams = teams_div.find_all('div', class_='team')
 
-                set_scores_dict = {f'Set{j}_HomeScore': None for j in range(1, 6)} # Max 5 sets
-                set_scores_dict.update({f'Set{j}_AwayScore': None for j in range(1, 6)})
+                        home_team = teams[0].find('div', class_='short-name').text.strip()
+                        away_team = teams[1].find('div', class_='short-name').text.strip()
+                        
+                        match_score_div = match_container.find('div', class_='match-score')
+                        home_set_score = None
+                        away_set_score = None
+                        if match_score_div:
+                            set_scores_overall = match_score_div.find_all('div', class_='set-score')
+                            if len(set_scores_overall) >= 2:
+                                home_set_score = safe_int_conversion(set_scores_overall[0].text.strip())
+                                away_set_score = safe_int_conversion(set_scores_overall[1].text.strip())
+                            else:
+                                print(f"Warning: Not enough overall set scores found for {home_team} vs {away_team} in {match_detail_url}. Skipping overall set scores.")
+                        else:
+                            print(f"Warning: No match score div found for {home_team} vs {away_team} at {current_date}. Skipping overall set scores.")
+                        
+                        sets_score_container = match_container.find('div', class_='sets-score')
+                        set_results = sets_score_container.find_all('div', class_='result')
 
-                for set_num, set_result_div in enumerate(set_results):
-                    # Find both score divs within the current set's result div
-                    scores_in_set = set_result_div.find_all('div', class_='set-score')
+                        set_scores_dict = {f'Set{j}_HomeScore': None for j in range(1, 6)}
+                        set_scores_dict.update({f'Set{j}_AwayScore': None for j in range(1, 6)})
 
-                    if len(scores_in_set) == 2:
-                        # ASSUMPTION: First score is HOME, second score is AWAY, regardless of 'won' class
-                        set_home_score = safe_int_conversion(scores_in_set[0].text.strip())
-                        set_away_score = safe_int_conversion(scores_in_set[1].text.strip())
+                        for set_num, set_result_div in enumerate(set_results):
+                            scores_in_set = set_result_div.find_all('div', class_='set-score')
 
-                        # Store only up to 5 sets
-                        if set_num < 5:
-                            set_scores_dict[f'Set{set_num+1}_HomeScore'] = set_home_score
-                            set_scores_dict[f'Set{set_num+1}_AwayScore'] = set_away_score
-                    else:
-                        print(f"Warning: Unexpected number of set scores in result div for set {set_num+1} in {match_detail_url}")
-                # <==== CONSTRUCT MATCH DATA ====> 
-                match_data = {
-                    'Date': current_date,
-                    'HomeTeam': home_team,
-                    'AwayTeam': away_team,
-                    'HomeSetsWon': home_set_score,
-                    'AwaySetsWon': away_set_score,
-                    'MatchDetailURL': match_detail_url,
-                    **set_scores_dict # Unpack individual set scores
-                }
-                #Calculate total points for THIS match using the already constructed match_data dict
-                match_data['HomeTotalPoints'] = calculate_total_points(match_data, 'Home')
-                match_data['AwayTotalPoints'] = calculate_total_points(match_data, 'Away')
-                all_matches_data.append(match_data)
-                            
+                            if len(scores_in_set) == 2:
+                                set_home_score = safe_int_conversion(scores_in_set[0].text.strip())
+                                set_away_score = safe_int_conversion(scores_in_set[1].text.strip())
+
+                                if set_num < 5:
+                                    set_scores_dict[f'Set{set_num+1}_HomeScore'] = set_home_score
+                                    set_scores_dict[f'Set{set_num+1}_AwayScore'] = set_away_score
+                            else:
+                                print(f"Warning: Unexpected number of set scores in result div for set {set_num+1} for {match_detail_url}. Skipping set scores.")
+                        
+                        match_data = {
+                            'Date': current_date,
+                            'HomeTeam': home_team,
+                            'AwayTeam': away_team,
+                            'HomeSetsWon': home_set_score,
+                            'AwaySetsWon': away_set_score,
+                            'MatchDetailURL': match_detail_url,
+                            **set_scores_dict
+                        }
+                        
+                        match_data['HomeTotalPoints'] = calculate_total_points(match_data, 'Home')
+                        match_data['AwayTotalPoints'] = calculate_total_points(match_data, 'Away')
+
+                        all_matches_data.append(match_data)
+                                    
+                    except AttributeError as e:
+                        print(f"Skipping match (possible incomplete data or structure change): {e} for URL {match_detail_url}")
+                        continue
+                    except ValueError as e:
+                        print(f"Error converting data for {home_team} vs {away_team}: {e} for URL {match_detail_url}")
+                        continue
+            
     except TimeoutException:
-        print(f"Timed out waiting for page elements to load at {SCHEDULE_URL}. The website might be slow or heavily dynamic.")
+        print(f"Timed out waiting for page elements to load at {SCHEDULE_URLS[0]}. The website might be slow or heavily dynamic.")
     except WebDriverException as e:
         print(f"A WebDriver error occurred during navigation or element location: {e}")
         print("Please ensure ChromeDriver is installed and its path is correct, and that its version matches your Chrome browser.")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
     finally:
-        # Always ensure the browser is closed
         if driver:
             driver.quit()
     
@@ -155,17 +169,21 @@ def getMatchData():
     
     df_matches = pd.DataFrame(all_matches_data)
     
-    # Determine Winner/Loser based on sets won
-    df_matches['Winner'] = df_matches.apply(
-        lambda row: row['HomeTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['HomeSetsWon'] > row['AwaySetsWon'] else (
-            row['AwayTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['AwaySetsWon'] > row['HomeSetsWon'] else None
-        ), axis=1
-    )
-    df_matches['Loser'] = df_matches.apply(
-        lambda row: row['AwayTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['HomeSetsWon'] > row['AwaySetsWon'] else (
-            row['HomeTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['AwaySetsWon'] > row['HomeSetsWon'] else None
-        ), axis=1
-    )
+    if not df_matches.empty and 'HomeSetsWon' in df_matches.columns and 'AwaySetsWon' in df_matches.columns:
+        df_matches['Winner'] = df_matches.apply(
+            lambda row: row['HomeTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['HomeSetsWon'] > row['AwaySetsWon'] else (
+                row['AwayTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['AwaySetsWon'] > row['HomeSetsWon'] else None
+            ), axis=1
+        )
+        df_matches['Loser'] = df_matches.apply(
+            lambda row: row['AwayTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['HomeSetsWon'] > row['AwaySetsWon'] else (
+                row['HomeTeam'] if row['HomeSetsWon'] is not None and row['AwaySetsWon'] is not None and row['AwaySetsWon'] > row['HomeSetsWon'] else None
+            ), axis=1
+        )
+    else:
+        df_matches['Winner'] = None
+        df_matches['Loser'] = None
+    
     return df_matches
 
 def getData():
@@ -183,7 +201,7 @@ def getData():
     return df
 
 # Define filenames for your saved data
-MATCH_DATA_FILE = 'vnl_2024_matches_saved.csv'
+MATCH_DATA_FILE = 'vnl_matches_saved.csv'
 PLAYER_DATA_FILE = 'vnl_2024_players_saved.csv' 
 
 def saveMatchData():
@@ -228,4 +246,13 @@ def saveMatchData():
     print("df_matches head:\n", df_matches.head())
     print("\ndf_players head:\n", df_players.head())
 
-saveMatchData()  # Call the function to save match data
+def main():
+    """
+    Main function to scrape data
+    """
+    getMatchData()
+    saveMatchData()
+    
+    
+if __name__ == "__main__":
+    main()

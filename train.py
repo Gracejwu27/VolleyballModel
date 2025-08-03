@@ -222,7 +222,7 @@ def main():
 
     print("\nLoading match data...")
     # Get match data from the preprocess module
-    df_matches = pd.read_csv('vnl_2024_matches_saved.csv')  
+    df_matches = pd.read_csv('vnl_matches_saved.csv')  
     if df_matches is None or df_matches.empty:
         print("Error: Match data (df_matches) is not loaded or is empty. Cannot proceed with model training.")
         return
@@ -236,12 +236,8 @@ def main():
 
     if trained_model:
         print("\nModel training and evaluation process completed successfully!")
-        # You can save the trained model here if you want to use it later without retraining:
-        # import joblib
-        # joblib.dump(trained_model, 'vnl_winner_prediction_model.pkl')
-               # Ensure 'USA' and 'ITA' are valid team IDs present in your data
-        home_team_to_predict = 'ITA'
-        away_team_to_predict = 'BRA'
+        home_team_to_predict = 'USA'
+        away_team_to_predict = 'ITA'
         
         if home_team_to_predict not in df_team_stats_for_pred['Team'].values:
             print(f"Error: Team '{home_team_to_predict}' not found in team statistics. Cannot predict.")
