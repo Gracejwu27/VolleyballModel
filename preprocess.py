@@ -40,6 +40,7 @@ def getMatchData():
  # --- Configuration ---
     BASE_URL = "https://vnlw.volleystation.com"
     SCHEDULE_URLS = [
+        f"{BASE_URL}/en/season/74/phase-623-wvnl2023/results/", # VNL 2023 Women
         f"{BASE_URL}/en/season/102/phase-1784-vnl-2024-women/results/", # VNL 2024 Women
         f"{BASE_URL}/en/phase-3451-vnl-2025-women/results/" # VNL 2025 Women
     ]
@@ -56,7 +57,6 @@ def getMatchData():
 
     driver = None # Initialize driver to None for proper cleanup in finally block
     all_matches_data = []
-    print("Getting match data from VNL 2024...")
     try:
         service = Service(executable_path=CHROMEDRIVER_PATH)
         driver = webdriver.Chrome(service=service, options=options)
